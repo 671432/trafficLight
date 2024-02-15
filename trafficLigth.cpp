@@ -5,12 +5,15 @@
 #include "trafficLigth.h"
 #include <Windows.h>
 #include <memory>
+#include <Math.h>
 
 
 #define MAX_LOADSTRING 100
+#define _USE_MATH_DEFINES
 #define TIMER_LYS 1
 #define TIMER_BIL 3
 #define TIMER_ADD_BILER 4
+#define TIMER_DRIVE 6
 /*
 #define bilLengde 25
 #define bilBredde 50
@@ -157,7 +160,10 @@ void DrawRoads(HDC hdc, RECT clientRect) {
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
-
+    
+    static int rot = 0;
+    static int circleX = 0;
+    
     switch (message)
     {
     case WM_CREATE:
@@ -172,13 +178,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         int centerX = (clientRect.right) / 2;
         int centerY = (clientRect.bottom) / 2;
 
-        // trafikkLys[0] = std::make_unique<TrafikkLys>(RECT{ (3),(centerY),(centerX),(centerY) }, TrafikkLys::Tilstand::RED);
-
         trafikkLys[0] = std::make_unique<TrafikkLys>(RECT{ (centerX - spacing / 2 - roadWidth),(centerY - 100 / 2),(centerX - spacing / 2),(centerY + roadWidth / 2) }, TrafikkLys::Tilstand::RED);
         trafikkLys[1] = std::make_unique<TrafikkLys>(RECT{ (centerX + spacing / 2), (centerY - roadWidth / 2), (centerX + spacing / 2 + roadWidth), (centerY + roadWidth / 2) }, TrafikkLys::Tilstand::GREEN);
 
         SetTimer(hWnd, TIMER_LYS, 1000, NULL);
         SetTimer(hWnd, TIMER_BIL, 1000, NULL);
+        SetTimer(hWnd, TIMER_DRIVE, 10, NULL);
         SetTimer(hWnd, TIMER_ADD_BILER, 1000, NULL);
     }
     break;
@@ -204,26 +209,53 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_PAINT:
     {
         PAINTSTRUCT ps;
-        HDC hdc = BeginPaint(hWnd, &ps);
-
+        HDC phdc = BeginPaint(hWnd, &ps);
+        HDC hdc = CreateCompatibleDC(phdc);
+        //henter vindue stoerelse
         RECT clientRect;
         GetClientRect(hWnd, &clientRect);
-
-
-        DrawRoads(hdc, clientRect);
-
-        if (trafikkLys[0]) trafikkLys[0]->tegn(hdc);
-        if (trafikkLys[1]) trafikkLys[1]->tegn(hdc);
-
-        int centerX = (clientRect.right) / 2;
-        int centerY = (clientRect.bottom) / 2;
-        HBRUSH hGreyBrush = CreateSolidBrush(RGB(100, 100, 100));
-        SelectObject(hdc, hGreyBrush);
-        Rectangle(hdc, centerX - 125, centerY + 25, centerX, centerY - 25);
+        //lager bitmap foer alt anna for at den ikke tegner bakgrunn over alt sammen
+        HBITMAP bmp = CreateCompatibleBitmap(phdc, clientRect.right, clientRect.bottom);
+        SelectObject(hdc, bmp);
+        //ny bitmap farge (for bil veien)
+        HBRUSH bg = CreateSolidBrush(RGB(200, 200, 200));
+        HGDIOBJ hOrg = SelectObject(hdc, bg);
+        Rectangle(hdc, 0, 0, clientRect.right, clientRect.bottom);
+        //int circleX = 0;
+        int circleY = (clientRect.bottom) / 2;
+        //skole buss broom broom
+        HBRUSH hYellowBrush = CreateSolidBrush(RGB(255, 255, 0));
+        HBRUSH hWheelBrush = CreateSolidBrush(RGB(128, 128, 128));
+        SelectObject(hdc, hWheelBrush);
+        Ellipse(hdc, circleX - 115, circleY, circleX-90, circleY+35);
+        Ellipse(hdc, circleX - 40, circleY, circleX - 15, circleY + 35);
+        SelectObject(hdc, hYellowBrush);
+        Rectangle(hdc, circleX - 125, circleY + 25, circleX, circleY - 25);
         HBRUSH hBlueBrush = CreateSolidBrush(RGB(135, 206, 235));
         SelectObject(hdc, hBlueBrush);
-        Rectangle(hdc, centerX - 30, centerY + 22, centerX - 5, centerY - 22);
-
+        Rectangle(hdc, circleX - 30, circleY + 22, circleX - 5, circleY - 22);
+        RECT rectangle = { circleX - 125, circleY + 25, circleX - 34, circleY - 25 };
+        SelectObject(hdc, hYellowBrush);
+        LPCWSTR text = L"School Buss";
+        Rectangle(hdc, rectangle.left, rectangle.top, rectangle.right, rectangle.bottom);
+        SetBkMode(hdc, TRANSPARENT);
+        DrawText(hdc, text, -1, &rectangle, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+        SelectObject(hdc, hOrg);
+        //bygger bitmap
+        BitBlt(phdc, 0, 0, clientRect.right, clientRect.bottom, hdc, 0, 0, SRCCOPY);
+        //fortau
+        DrawRoads(phdc, clientRect);
+        //trafikkLys lys
+        if (trafikkLys[0]) trafikkLys[0]->tegn(phdc);
+        if (trafikkLys[1]) trafikkLys[1]->tegn(phdc);
+        //cleanup
+        DeleteObject(hYellowBrush);
+        DeleteObject(hWheelBrush);
+        DeleteObject(hBlueBrush);
+        DeleteObject(bmp);
+        DeleteDC(hdc);
+        DeleteObject(bg);
+        //end paint
         EndPaint(hWnd, &ps);
     }
     break;
@@ -245,7 +277,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             }
             else
             {
-                SetTimer(hWnd, TIMER_LYS, 5000, NULL);
+                SetTimer(hWnd, TIMER_LYS, 3000, NULL);
                 timerCount = 0;
             }
             InvalidateRect(hWnd, NULL, TRUE);
@@ -295,6 +327,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             InvalidateRect(hWnd, NULL, TRUE);
             break;
         }
+    //case TIMER_DRIVE:
+            //rot = (rot+1) % 360;
+            circleX += 5; //speed of cars
+            InvalidateRect(hWnd, 0, false);
+            break;
+        
+        
         /*
         case TIMER_ADD_BILER:
         HDC screenDC = GetDC(hWnd);
